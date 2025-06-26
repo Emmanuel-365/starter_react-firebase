@@ -3,6 +3,7 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../services/firebase';
 import { useNavigate } from 'react-router-dom';
 import { Container, TextField, Button, Typography, Box, Alert } from '@mui/material';
+import { motion } from 'framer-motion';
 
 const SignupPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -77,21 +78,25 @@ const SignupPage: React.FC = () => {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
           />
-          <Button
-            type="submit"
-            fullWidth
-            variant="contained"
-            sx={{ mt: 3, mb: 2 }}
-          >
-            S'inscrire
-          </Button>
-          <Button
-            fullWidth
-            onClick={() => navigate('/login')}
-            sx={{ textTransform: 'none' }}
-          >
-            Vous avez déjà un compte ? Connectez-vous
-          </Button>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              sx={{ mt: 3, mb: 2 }}
+            >
+              S'inscrire
+            </Button>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+            <Button
+              fullWidth
+              onClick={() => navigate('/login')}
+              sx={{ textTransform: 'none' }}
+            >
+              Vous avez déjà un compte ? Connectez-vous
+            </Button>
+          </motion.div>
         </Box>
       </Box>
     </Container>

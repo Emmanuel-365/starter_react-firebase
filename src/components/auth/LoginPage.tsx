@@ -4,6 +4,7 @@ import { auth } from '../../services/firebase';
 import { useNavigate } from 'react-router-dom';
 import { Container, TextField, Button, Typography, Box, Alert } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
+import { motion } from 'framer-motion';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -72,30 +73,36 @@ const LoginPage: React.FC = () => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          <Button
-            type="submit"
-            fullWidth
-            variant="contained"
-            sx={{ mt: 3, mb: 2 }}
-          >
-            Se connecter
-          </Button>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<GoogleIcon />}
-            onClick={handleGoogleSignIn}
-            sx={{ mb: 2 }}
-          >
-            Se connecter avec Google
-          </Button>
-          <Button
-            fullWidth
-            onClick={() => navigate('/signup')}
-            sx={{ textTransform: 'none' }}
-          >
-            Vous n'avez pas de compte ? Inscrivez-vous
-          </Button>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              sx={{ mt: 3, mb: 2 }}
+            >
+              Se connecter
+            </Button>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={<GoogleIcon />}
+              onClick={handleGoogleSignIn}
+              sx={{ mb: 2 }}
+            >
+              Se connecter avec Google
+            </Button>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+            <Button
+              fullWidth
+              onClick={() => navigate('/signup')}
+              sx={{ textTransform: 'none' }}
+            >
+              Vous n'avez pas de compte ? Inscrivez-vous
+            </Button>
+          </motion.div>
         </Box>
       </Box>
     </Container>

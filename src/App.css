@@ -3,6 +3,11 @@
   margin: 0 auto;
   padding: 2rem;
   text-align: center;
+  display: flex; /* Enable flexbox for #root */
+  flex-direction: column; /* Stack children vertically */
+  align-items: center; /* Center children horizontally */
+  justify-content: center; /* Center children vertically if #root has a defined height or is a flex item itself */
+  width: 100%; /* Ensure #root takes full width */
 }
 
 .logo {
