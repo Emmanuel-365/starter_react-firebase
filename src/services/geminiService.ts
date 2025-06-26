@@ -64,7 +64,7 @@ export const generateEmailContent = async (
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" }); // Or other suitable model like "gemini-1.0-pro"
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" }); // Or other suitable model like "gemini-1.0-pro"
 
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
