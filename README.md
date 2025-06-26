@@ -60,7 +60,18 @@ Ce projet est une base complète pour une application React qui permet de :
    VITE_EMAILJS_TEMPLATE_ID=...
    VITE_EMAILJS_PUBLIC_KEY=...
 
-   VITE_OPENAI_API_KEY=...
+   VITE_OPENAI_API_KEY=... # Note: This was VITE_GEMINI_API_KEY in .env.example, adjust if needed
+
+   # Configuration pour Cloudinary (Téléchargement d'images)
+   # 1. Créez un compte gratuit sur https://cloudinary.com/users/register_free
+   # 2. Une fois connecté, votre "Cloud Name" est visible sur le tableau de bord.
+   # 3. Allez dans Settings (icône roue dentée) > Upload.
+   # 4. Descendez jusqu'à "Upload presets", cliquez sur "Add upload preset".
+   # 5. Choisissez un nom pour votre preset (ex: `react_unsigned_uploads`).
+   # 6. Réglez "Signing Mode" sur "Unsigned".
+   # 7. Sauvegardez le preset. Utilisez le nom du preset et votre Cloud Name ci-dessous.
+   VITE_CLOUDINARY_CLOUD_NAME=YOUR_CLOUDINARY_CLOUD_NAME
+   VITE_CLOUDINARY_UPLOAD_PRESET=YOUR_CLOUDINARY_UPLOAD_PRESET
    ```
 
 5. **Démarrer le serveur de développement :**

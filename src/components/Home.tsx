@@ -1,6 +1,7 @@
 import React from 'react';
 import { Typography, Container, Paper, Box } from '@mui/material';
 import { motion } from 'framer-motion';
+import ImageUpload from '../components/ImageUpload';
 
 const Home: React.FC = () => {
   return (
@@ -10,14 +11,15 @@ const Home: React.FC = () => {
           <Typography variant="h4" component="h1" gutterBottom>
             Bienvenue sur la page d'accueil !
           </Typography>
-        <Typography variant="body1">
-          Ceci est un exemple de page d'accueil pour les utilisateurs authentifiés.
-          Vous pouvez ajouter ici le contenu principal de votre application.
-        </Typography>
-        <Box sx={{ mt: 2 }}>
-          {/* Vous pouvez ajouter d'autres composants ou informations ici */}
-        </Box>
-      </Paper>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Ceci est un exemple de page d'accueil pour les utilisateurs authentifiés.
+            Vous pouvez ajouter ici le contenu principal de votre application.
+          </Typography>
+          
+          {/* Integrer le composant ImageUpload ici */}
+          <ImageUpload />
+
+        </Paper>
       </motion.div>
     </Container>
   );
