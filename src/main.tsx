@@ -1,14 +1,17 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Provider } from 'react-redux'; // Import Provider
+import { Provider as ReduxProvider } from 'react-redux'; // Renamed Provider to ReduxProvider
 import { store } from './redux/store';   // Import store
 import './index.css';
 import App from './App.tsx';
+import { AuthProvider } from './context/AuthContext'; // Import AuthProvider
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Provider store={store}> {/* Wrap App with Provider */}
-      <App />
-    </Provider>
+    <ReduxProvider store={store}> {/* Use ReduxProvider */}
+      <AuthProvider> {/* Wrap App with AuthProvider */}
+        <App />
+      </AuthProvider>
+    </ReduxProvider>
   </StrictMode>,
 );
