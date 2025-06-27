@@ -8,13 +8,23 @@ import {
   getDocs,
   query,
   serverTimestamp,
+  setDoc, // Added setDoc
   updateDoc,
   where,
   writeBatch,
 } from "firebase/firestore";
 import { db, auth } from "./firebase"; // Assuming auth might be needed for current user context
 import type { Family } from "../types/Family";
-import { type FamilyMember, FamilyMemberRole, FamilyMemberStatus, type MemberProfileInfo } from "../types/FamilyMember";
+import {
+  type FamilyMember,
+  FamilyMemberRole,
+  FamilyMemberStatus,
+  type MemberProfileInfo,
+  type FamilyMemberWithFamilyDetails // Import the new type
+} from "../types/FamilyMember";
+// To get current user's email for querying invitations. Note: auth.currentUser might be null.
+// It's better to pass the user object or specific identifiers like email or UID to service functions.
+
 
 const familiesCollection = collection(db, "families");
 const familyMembersCollection = collection(db, "familyMembers");
@@ -201,25 +211,56 @@ const internalAddFamilyMember = async (
     throw new Error("Member's first name is required in profileInfo.");
   }
 
-  const newMemberDocRef = doc(familyMembersCollection); 
+  const newMemberDocRef = doc(familyMembersCollection); // Firestore auto-generates an ID for this ref
 
-  const dataToSave: Omit<FamilyMember, "id"> = {
+  // Base data, always present
+  const dataToSave: any = { // Use 'any' temporarily for easier conditional property adding, or build step-by-step
     familyId: familyId,
-    userId: memberData.userId,
     profileInfo: memberData.profileInfo,
     role: memberData.role,
     status: (memberData.userId || memberData.invitedEmail) ? FamilyMemberStatus.PENDING : FamilyMemberStatus.ACTIVE,
     invitedByUserId: invitedByUserId,
-    invitedEmail: memberData.invitedEmail,
-    invitationSentAt: (memberData.userId || memberData.invitedEmail) ? (serverTimestamp() as Timestamp) : undefined,
-    joinedAt: !(memberData.userId || memberData.invitedEmail) ? (serverTimestamp() as Timestamp) : undefined,
-    updatedAt: serverTimestamp() as Timestamp,
+    invitationSentAt: (memberData.userId || memberData.invitedEmail) ? serverTimestamp() : undefined,
+    joinedAt: !(memberData.userId || memberData.invitedEmail) ? serverTimestamp() : undefined,
+    updatedAt: serverTimestamp(),
   };
 
-  await addDoc(familyMembersCollection, { ...dataToSave, id: newMemberDocRef.id});
+  // Conditionally add userId and invitedEmail to avoid storing 'undefined'
+  if (memberData.userId) {
+    dataToSave.userId = memberData.userId;
+  }
+  if (memberData.invitedEmail) {
+    dataToSave.invitedEmail = memberData.invitedEmail;
+  }
+
+  // Remove any fields that are explicitly undefined, as Firestore does not support them.
+  // serverTimestamp() is fine, it's a sentinel value.
+  Object.keys(dataToSave).forEach(key => {
+    if (dataToSave[key] === undefined) {
+      delete dataToSave[key];
+    }
+  });
+
+  // Use setDoc with the pre-generated document reference
+  await setDoc(newMemberDocRef, dataToSave);
   const memberId = newMemberDocRef.id;
+
+  // Construct fullMemberData for return by spreading dataToSave and adding server-generated timestamps if needed
+  // For simplicity, we'll return dataToSave which now correctly omits undefined fields.
+  // The actual timestamp values will be on the server, this fullMemberData is mostly for client-side state update.
+  const fullMemberDataForReturn: Omit<FamilyMember, "id"> = {
+    ...dataToSave,
+    // If serverTimestamp() was used, those fields will be placeholder objects on client until data is refetched.
+    // This is usually fine for Redux state updates.
+    createdAt: dataToSave.createdAt || serverTimestamp(), // Example if createdAt was part of it
+    updatedAt: dataToSave.updatedAt || serverTimestamp(),
+    joinedAt: dataToSave.joinedAt, // Will be serverTimestamp() or undefined
+    invitationSentAt: dataToSave.invitationSentAt, // Will be serverTimestamp() or undefined
+  };
+
+
   console.log(`Member ${memberId} (internal) added to family ${familyId}. Status: ${dataToSave.status}`);
-  return {memberId, fullMemberData: dataToSave};
+  return {memberId, fullMemberData: fullMemberDataForReturn };
 };
 
 /**
@@ -291,11 +332,12 @@ export const removeFamilyMember = async (memberId: string): Promise<void> => {
  * Allows a user to accept an invitation to join a family.
  * Updates the FamilyMember status to ACTIVE and sets the joinedAt timestamp.
  * @param familyMemberId - The ID of the FamilyMember document representing the invitation.
- * @param userId - The ID of the user accepting the invitation (for verification).
+ * @param acceptingUserId - The ID of the user accepting the invitation.
+ * @param acceptingUserEmail - The email of the user accepting (for matching email-based invites).
  */
-export const acceptFamilyInvitation = async (familyMemberId: string, userId: string): Promise<void> => {
-  if (!familyMemberId || !userId) {
-    throw new Error("FamilyMember ID and User ID are required to accept an invitation.");
+export const acceptFamilyInvitation = async (familyMemberId: string, acceptingUserId: string, acceptingUserEmail: string): Promise<void> => {
+  if (!familyMemberId || !acceptingUserId || !acceptingUserEmail) {
+    throw new Error("FamilyMember ID, User ID, and User Email are required to accept an invitation.");
   }
 
   const memberDocRef = doc(db, "familyMembers", familyMemberId);
@@ -307,19 +349,40 @@ export const acceptFamilyInvitation = async (familyMemberId: string, userId: str
 
   const memberData = memberDocSnap.data() as FamilyMember;
 
-  if (memberData.userId !== userId) {
-    throw new Error(`This invitation is for a different user.`);
-  }
-  if (memberData.status !== FamilyMemberStatus.PENDING) {
-    throw new Error(`This invitation is not currently pending (status: ${memberData.status}).`);
+  // Check if the invitation is for this user
+  let isUserAuthorizedToAccept = false;
+  if (memberData.userId && memberData.userId === acceptingUserId) {
+    // Invitation was directly targeted to this userId
+    isUserAuthorizedToAccept = true;
+  } else if (!memberData.userId && memberData.invitedEmail && memberData.invitedEmail === acceptingUserEmail) {
+    // Invitation was email-based, and this user's email matches
+    isUserAuthorizedToAccept = true;
   }
 
-  await updateDoc(memberDocRef, {
+  if (!isUserAuthorizedToAccept) {
+    throw new Error(`This invitation (${memberData.invitedEmail} / ${memberData.userId}) is not for you (${acceptingUserEmail} / ${acceptingUserId}).`);
+  }
+
+  if (memberData.status !== FamilyMemberStatus.PENDING) {
+    // Could be already accepted, declined, or in an unexpected state
+    throw new Error(`This invitation is not currently pending (current status: ${memberData.status}).`);
+  }
+
+  const updatePayload: any = {
     status: FamilyMemberStatus.ACTIVE,
     joinedAt: serverTimestamp() as Timestamp,
-    updatedAt: serverTimestamp() // Assuming an 'updatedAt' field
-  });
-  console.log(`User ${userId} accepted invitation ${familyMemberId}. Status set to ACTIVE.`);
+    updatedAt: serverTimestamp() as Timestamp,
+  };
+
+  // If the original invite was purely email-based (no userId), assign the accepting user's ID now.
+  if (!memberData.userId && memberData.invitedEmail === acceptingUserEmail) {
+    updatePayload.userId = acceptingUserId;
+  }
+  // If memberData.userId was already set, it must match acceptingUserId (handled by isUserAuthorizedToAccept)
+  // No need to update userId if it was already correctly set.
+
+  await updateDoc(memberDocRef, updatePayload);
+  console.log(`User ${acceptingUserId} accepted invitation ${familyMemberId}. Status set to ACTIVE.`);
 };
 
 /**
@@ -327,11 +390,12 @@ export const acceptFamilyInvitation = async (familyMemberId: string, userId: str
  * Updates the FamilyMember status to DECLINED.
  * (Alternatively, one could delete the FamilyMember document).
  * @param familyMemberId - The ID of the FamilyMember document representing the invitation.
- * @param userId - The ID of the user declining the invitation (for verification).
+ * @param decliningUserId - The ID of the user declining the invitation.
+ * @param decliningUserEmail - The email of the user declining the invitation.
  */
-export const declineFamilyInvitation = async (familyMemberId: string, userId: string): Promise<void> => {
-  if (!familyMemberId || !userId) {
-    throw new Error("FamilyMember ID and User ID are required to decline an invitation.");
+export const declineFamilyInvitation = async (familyMemberId: string, decliningUserId: string, decliningUserEmail: string): Promise<void> => {
+  if (!familyMemberId || !decliningUserId || !decliningUserEmail) {
+    throw new Error("FamilyMember ID, User ID, and User Email are required to decline an invitation.");
   }
 
   const memberDocRef = doc(db, "familyMembers", familyMemberId);
@@ -342,21 +406,32 @@ export const declineFamilyInvitation = async (familyMemberId: string, userId: st
   }
 
   const memberData = memberDocSnap.data() as FamilyMember;
-   if (memberData.userId !== userId) {
-    throw new Error(`This invitation is for a different user.`);
+
+  let isUserAuthorizedToDecline = false;
+  if (memberData.userId && memberData.userId === decliningUserId) {
+    isUserAuthorizedToDecline = true;
+  } else if (!memberData.userId && memberData.invitedEmail && memberData.invitedEmail === decliningUserEmail) {
+    isUserAuthorizedToDecline = true;
   }
+
+  if (!isUserAuthorizedToDecline) {
+    throw new Error(`This invitation (${memberData.invitedEmail} / ${memberData.userId}) is not for you (${decliningUserEmail} / ${decliningUserId}).`);
+  }
+
   if (memberData.status !== FamilyMemberStatus.PENDING) {
-    // Allow declining even if not strictly pending, perhaps? For now, strict.
-    console.warn(`Attempt to decline an invitation that is not pending (status: ${memberData.status}).`);
-    // Or throw: throw new Error(`This invitation is not currently pending.`);
+    // Allow declining even if not strictly pending, as long as it's their invitation.
+    // For example, they might want to "decline" an invite they previously accepted by mistake,
+    // though that flow would typically be "leave family".
+    // For now, if it's not PENDING, it's unusual to decline, but we'll allow it if authorized.
+    console.warn(`Attempt to decline an invitation that is not currently PENDING (status: ${memberData.status}). Action will proceed as user is authorized.`);
   }
 
   await updateDoc(memberDocRef, {
     status: FamilyMemberStatus.DECLINED,
-    updatedAt: serverTimestamp() // Assuming an 'updatedAt' field
+    updatedAt: serverTimestamp() as Timestamp, // Ensure cast if needed by TS config
   });
-  // Or: await deleteDoc(memberDocRef); if we prefer to remove declined invitations.
-  console.log(`User ${userId} declined invitation ${familyMemberId}. Status set to DECLINED.`);
+  // Or: await deleteDoc(memberDocRef); if we prefer to remove declined invitations entirely.
+  console.log(`User ${decliningUserId} declined invitation ${familyMemberId}. Status set to DECLINED.`);
 };
 
 
@@ -488,4 +563,54 @@ export const addFamilyMember = async (
 // Ensure the old export of addFamilyMember is removed or handled if it was different.
 // The new addFamilyMember (which calls internalAddFamilyMember and then handles email) is now the primary export.
 
-console.log("Family service initialized with member, invitation, and enhanced email functions.");
+
+/**
+ * Retrieves all pending invitations for a specific user, based on their email.
+ * It also fetches the name of the family for each invitation.
+ * @param userEmail - The email of the user whose pending invitations are to be fetched.
+ * @returns A promise that resolves to an array of FamilyMemberWithFamilyDetails objects.
+ */
+export const getUserPendingInvitations = async (userEmail: string): Promise<FamilyMemberWithFamilyDetails[]> => {
+  if (!userEmail) {
+    console.warn("getUserPendingInvitations called without a userEmail.");
+    return [];
+  }
+
+  // Query for family member documents where invitedEmail matches and status is PENDING
+  const q = query(
+    familyMembersCollection,
+    where("invitedEmail", "==", userEmail),
+    where("status", "==", FamilyMemberStatus.PENDING)
+  );
+  const invitationsSnapshot = await getDocs(q);
+
+  if (invitationsSnapshot.empty) {
+    return [];
+  }
+
+  const invitationsWithDetails: FamilyMemberWithFamilyDetails[] = [];
+
+  for (const memberDoc of invitationsSnapshot.docs) {
+    const invitationData = { id: memberDoc.id, ...memberDoc.data() } as FamilyMember;
+
+    // Fetch the corresponding family details to get the family name
+    const familyDetails = await getFamilyDetails(invitationData.familyId);
+
+    if (familyDetails) {
+      invitationsWithDetails.push({
+        ...invitationData,
+        familyName: familyDetails.name,
+        // You could also fetch inviter's profile here if needed:
+        // inviterProfile: invitationData.invitedByUserId ? await getUserProfileInfoForEmail(invitationData.invitedByUserId) : undefined,
+      });
+    } else {
+      // Handle case where family details might be missing, though unlikely if data is consistent
+      console.warn(`Could not fetch family details for familyId: ${invitationData.familyId} for an invitation.`);
+    }
+  }
+
+  return invitationsWithDetails;
+};
+
+
+console.log("Family service initialized with member, invitation, enhanced email, and pending invitations functions.");

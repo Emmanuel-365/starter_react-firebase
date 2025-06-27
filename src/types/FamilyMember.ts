@@ -36,3 +36,10 @@ export interface FamilyMember {
   joinedAt?: Timestamp;
   updatedAt?: Timestamp; // For tracking updates to the member's record
 }
+
+// Type for displaying invitations with enriched family information
+export interface FamilyMemberWithFamilyDetails extends FamilyMember {
+  familyName: string;
+  // Potentially add inviter's name/profile if needed for display
+  // inviterProfile?: { displayName?: string | null; email?: string | null };
+}
