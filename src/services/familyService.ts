@@ -5,6 +5,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  setDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -201,25 +202,56 @@ const internalAddFamilyMember = async (
     throw new Error("Member's first name is required in profileInfo.");
   }
 
-  const newMemberDocRef = doc(familyMembersCollection); 
+  const newMemberDocRef = doc(familyMembersCollection); // Firestore auto-generates an ID for this ref
 
-  const dataToSave: Omit<FamilyMember, "id"> = {
+  // Base data, always present
+  const dataToSave: any = { // Use 'any' temporarily for easier conditional property adding, or build step-by-step
     familyId: familyId,
-    userId: memberData.userId,
     profileInfo: memberData.profileInfo,
     role: memberData.role,
     status: (memberData.userId || memberData.invitedEmail) ? FamilyMemberStatus.PENDING : FamilyMemberStatus.ACTIVE,
     invitedByUserId: invitedByUserId,
-    invitedEmail: memberData.invitedEmail,
-    invitationSentAt: (memberData.userId || memberData.invitedEmail) ? (serverTimestamp() as Timestamp) : undefined,
-    joinedAt: !(memberData.userId || memberData.invitedEmail) ? (serverTimestamp() as Timestamp) : undefined,
-    updatedAt: serverTimestamp() as Timestamp,
+    invitationSentAt: (memberData.userId || memberData.invitedEmail) ? serverTimestamp() : undefined,
+    joinedAt: !(memberData.userId || memberData.invitedEmail) ? serverTimestamp() : undefined,
+    updatedAt: serverTimestamp(),
   };
 
-  await addDoc(familyMembersCollection, { ...dataToSave, id: newMemberDocRef.id});
+  // Conditionally add userId and invitedEmail to avoid storing 'undefined'
+  if (memberData.userId) {
+    dataToSave.userId = memberData.userId;
+  }
+  if (memberData.invitedEmail) {
+    dataToSave.invitedEmail = memberData.invitedEmail;
+  }
+  
+  // Remove any fields that are explicitly undefined, as Firestore does not support them.
+  // serverTimestamp() is fine, it's a sentinel value.
+  Object.keys(dataToSave).forEach(key => {
+    if (dataToSave[key] === undefined) {
+      delete dataToSave[key];
+    }
+  });
+
+  // Use setDoc with the pre-generated document reference
+  await setDoc(newMemberDocRef, dataToSave); 
   const memberId = newMemberDocRef.id;
+
+  // Construct fullMemberData for return by spreading dataToSave and adding server-generated timestamps if needed
+  // For simplicity, we'll return dataToSave which now correctly omits undefined fields.
+  // The actual timestamp values will be on the server, this fullMemberData is mostly for client-side state update.
+  const fullMemberDataForReturn: Omit<FamilyMember, "id"> = {
+    ...dataToSave,
+    // If serverTimestamp() was used, those fields will be placeholder objects on client until data is refetched.
+    // This is usually fine for Redux state updates.
+    createdAt: dataToSave.createdAt || serverTimestamp(), // Example if createdAt was part of it
+    updatedAt: dataToSave.updatedAt || serverTimestamp(),
+    joinedAt: dataToSave.joinedAt, // Will be serverTimestamp() or undefined
+    invitationSentAt: dataToSave.invitationSentAt, // Will be serverTimestamp() or undefined
+  };
+
+
   console.log(`Member ${memberId} (internal) added to family ${familyId}. Status: ${dataToSave.status}`);
-  return {memberId, fullMemberData: dataToSave};
+  return {memberId, fullMemberData: fullMemberDataForReturn };
 };
 
 /**
