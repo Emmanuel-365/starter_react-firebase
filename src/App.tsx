@@ -8,6 +8,7 @@ import PrivateRoute from './components/auth/PrivateRoute';
 // For simplicity, keeping CssBaseline here for now.
 import CssBaseline from '@mui/material/CssBaseline'; 
 import Home from './components/Home';
+import ProfilePage from './components/profile/ProfilePage'; // Importer la page de profil
 // Removed local theme creation, as it's now globally provided from main.tsx via theme.ts
 
 const App: React.FC = () => {
@@ -16,17 +17,23 @@ const App: React.FC = () => {
       <CssBaseline /> {/* Apply baseline styling */}
       {/* AuthProvider is already in main.tsx */}
       <Router>
-        <AuthDetails /> {/* Display auth status and logout button globally or within specific layouts */}
+        {/* AuthDetails peut être déplacé dans un layout si besoin d'un affichage plus conditionnel */}
+        <AuthDetails /> 
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
-          {/* Protected Routes */}
+          
+          {/* Protected Routes using PrivateRoute */}
           <Route path="/" element={<PrivateRoute />}>
-            {/* Nested routes that require authentication */}
-            <Route index element={<Home />} /> {/* Default component for "/" when authenticated */}
-            {/* Add other protected routes here, e.g., <Route path="dashboard" element={<Dashboard />} /> */}
+            <Route index element={<Home />} /> 
+            <Route path="profile" element={<ProfilePage />} /> {/* Route protégée pour le profil */}
+            {/* Ajoutez d'autres routes protégées ici */}
+            {/* Exemple: <Route path="dashboard" element={<Dashboard />} /> */}
           </Route>
+          
           {/* Redirect any unknown paths to login or home depending on auth state, or a 404 page */}
+          {/* Pour une meilleure expérience, on pourrait rediriger vers "/" 
+              et laisser PrivateRoute gérer la redirection vers /login si non authentifié */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>
